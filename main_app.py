@@ -42,17 +42,17 @@ class MainApplication:
         self.active_vehicle_id = None
         
         self.payment_config = {
-            'script_url': 'https://script.google.com/macros/s/AKfycbxIOt2DmTDFqBBIVGtzrzvchH8ebbYIW-6RcP0ANQfztEnpRpJb5qemoQTLB15jTimH/exec',
+            'script_url': 'https://script.google.com/macros/s/AKfycbxchRS9MGnEfn2SC_56vLhX04Hz_5BsN0VDQs4P8bN07dzOyd2S5rqHO9efTJcPbisi/exec',
             'bank_id': 'MB',
             'account_no': '0396032433',
             'account_name': 'NGO VAN CHIEU',
-            'check_interval': 2,
-            'max_wait_time': 120
+            'max_wait_time': 300
         }
         self.payment_manager = PaymentManager(self.payment_config)
         
         if not os.path.exists('anh'):
             os.makedirs('anh')
+        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     def load_models(self, update_progress_callback=None):
         def update(value):
@@ -70,6 +70,7 @@ class MainApplication:
         
         update(80)
         time.sleep(1)
+        
         logging.info("Tải mô hình hoàn tất.")
         update(100)
 
@@ -79,39 +80,51 @@ class MainApplication:
 
     def start(self, user_info):
         self.current_user = user_info
+        
         self.root.title("HỆ THỐNG BÃI XE THÔNG MINH")
+        
         self.root.geometry('1200x650')
         self.root.resizable(True, True)
+
         self.root.configure(bg='#dcdcdc')
         self.root.protocol("WM_DELETE_WINDOW", self._on_closing)
+
         self.setup_styles()
         self.create_main_container()
         self.show_main_screen()
+        
         self.root.update_idletasks()
         self.root.deiconify()
 
     def create_main_container(self):
         self.main_container = ttk.Frame(self.root, style='Main.TFrame')
         self.main_container.pack(fill=tk.BOTH, expand=True)
+
         self.header_frame = ttk.Frame(self.main_container, height=60)
         self.header_frame.pack(fill=tk.X)
         self.header_frame.grid_columnconfigure(0, weight=1)
         self.header_frame.grid_columnconfigure(1, weight=1)
         self.header_frame.grid_columnconfigure(2, weight=1)
+
         self.left_header_frame = ttk.Frame(self.header_frame)
         self.left_header_frame.grid(row=0, column=0, sticky='w', padx=10)
+        
         self.center_header_frame = ttk.Frame(self.header_frame)
         self.center_header_frame.grid(row=0, column=1, sticky='ew')
+        
         self.right_header_frame = ttk.Frame(self.header_frame)
         self.right_header_frame.grid(row=0, column=2, sticky='e', padx=10)
+
         self.title_label = ttk.Label(self.center_header_frame, text="HỆ THỐNG BÃI XE THÔNG MINH", style='Title.TLabel')
         self.title_label.pack(pady=12)
+
         try:
             self.logo_img_pil = Image.open("logo.png").resize((100, 80), Image.Resampling.LANCZOS)
             self.logo_img = ImageTk.PhotoImage(self.logo_img_pil)
             ttk.Label(self.right_header_frame, image=self.logo_img).pack()
         except FileNotFoundError:
             ttk.Label(self.right_header_frame, text="Logo not found").pack()
+
         self.content_frame = ttk.Frame(self.main_container, style='Content.TFrame')
         self.content_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -183,7 +196,7 @@ class MainApplication:
         self.btn_confirm_payment = ttk.Button(btn_container, text="XÁC NHẬN THANH TOÁN", style='Danger.TButton', command=self.process_payment, state=tk.DISABLED)
         self.btn_confirm_payment.pack(fill=tk.X, expand=True, pady=3)
 
-        self.reset_info_panel()
+        self.reset_info_panel() 
 
         if self._camera_update_id:
             self.root.after_cancel(self._camera_update_id)
@@ -359,7 +372,7 @@ class MainApplication:
     def display_plate_image(self, plate_img, canvas):
         canvas.delete("all")
         canvas_w, canvas_h = canvas.winfo_width(), canvas.winfo_height()
-        if canvas_w < 2 or canvas_h < 2:
+        if canvas_w < 2 or canvas_h < 2: 
             self.root.after(50, lambda: self.display_plate_image(plate_img, canvas))
             return
         plate_resized = cv2.resize(plate_img, (canvas_w, canvas_h), interpolation=cv2.INTER_AREA)
@@ -437,14 +450,14 @@ class MainApplication:
 
     def _process_car_exit_thread(self, frame):
         plate_text = self.detect_license_plate(frame, self.plate_out_canvas, self.plate_out_var)
-        self.root.after(0, self.finalize_car_exit, plate_text)
+        self.root.after(0, self.finalize_car_exit, plate_text, frame)
 
-    def finalize_car_exit(self, plate_text):
+    def finalize_car_exit(self, plate_text, frame):
         if not plate_text:
-            messagebox.showerror("Lỗi", "Không nhận dạng được biển số xe ra. Vui lòng thử lại.")
+            messagebox.showerror("Lỗi nhận dạng", "Không nhận dạng được biển số xe. Vui lòng thử lại.")
             self.reset_info_panel()
             return
-
+        
         vehicle_data = self.db.find_active_vehicle(plate_text.upper())
         if not vehicle_data:
             messagebox.showerror("Lỗi", f"Không tìm thấy xe {plate_text.upper()} trong bãi.")
@@ -455,7 +468,7 @@ class MainApplication:
         db_plate = vehicle_data[1]
         db_rfid = vehicle_data[2]
         entry_time_str = vehicle_data[3]
-
+        
         try:
             entry_time = datetime.strptime(entry_time_str, '%Y-%m-%d %H:%M:%S.%f')
         except ValueError:
@@ -463,21 +476,17 @@ class MainApplication:
 
         exit_time = datetime.now()
         duration = exit_time - entry_time
-
+        
         days = duration.days
         hours, remainder = divmod(duration.seconds, 3600)
         minutes, _ = divmod(remainder, 60)
         duration_str = ""
-        if days > 0:
-            duration_str += f"{days} ngày "
-        if hours > 0:
-            duration_str += f"{hours} giờ "
+        if days > 0: duration_str += f"{days} ngày "
+        if hours > 0: duration_str += f"{hours} giờ "
         duration_str += f"{minutes} phút"
 
         total_hours = duration.total_seconds() / 3600
-        charged_hours = math.ceil(total_hours)
-        if charged_hours == 0:
-            charged_hours = 1
+        charged_hours = math.ceil(total_hours) if total_hours > 0 else 1
         fee = charged_hours * 10000
 
         self.info_vars["Biển Số Xe:"].set(db_plate)
@@ -487,27 +496,38 @@ class MainApplication:
         self.info_vars["Tổng giờ gửi:"].set(duration_str.strip())
         self.info_vars["Tổng Phí:"].set(f"{int(fee):,} VNĐ")
         self.info_vars["Trạng Thái Thanh Toán:"].set("Chưa thanh toán")
+        
+        self.btn_car_entry.config(state=tk.DISABLED)
+        self.btn_car_exit.config(state=tk.DISABLED)
 
         vehicle_data_dict = {
             'license_plate': db_plate,
-            'hours': round(total_hours, 2)
+            'hours': charged_hours
         }
 
         def on_payment_success(transaction_data):
+            logging.info(f"Thanh toán thành công: {transaction_data}")
             image_name = f"RA_{db_plate.replace('.', '')}_{exit_time.strftime('%Y%m%d%H%M%S')}.jpg"
             image_path = os.path.join('anh', image_name)
             if self.current_frame_out is not None:
                 cv2.imwrite(image_path, self.current_frame_out)
-
+            
             self.db.log_car_exit(self.active_vehicle_id, exit_time, fee, image_path, self.current_user['name'])
+            
             self.info_vars["Trạng Thái:"].set("Đã rời bãi")
             self.info_vars["Trạng Thái Thanh Toán:"].set("Đã thanh toán")
             self.btn_confirm_payment.config(state=tk.DISABLED)
+            self.btn_car_entry.config(state=tk.NORMAL)
+            self.btn_car_exit.config(state=tk.NORMAL)
+            
             messagebox.showinfo("Thành công", f"Xe {db_plate} đã ra khỏi bãi.\nPhí: {fee:,} VNĐ")
             self.root.after(2000, self.reset_info_panel)
 
         def on_payment_timeout():
+            logging.warning("Thời gian chờ thanh toán hết hạn")
             messagebox.showwarning("Hết thời gian", "Thời gian chờ thanh toán đã hết. Vui lòng thử lại.")
+            self.btn_car_entry.config(state=tk.NORMAL)
+            self.btn_car_exit.config(state=tk.NORMAL)
             self.reset_info_panel()
 
         payment_data = self.payment_manager.start_payment_flow(vehicle_data_dict, fee, on_payment_success, on_payment_timeout)
@@ -516,13 +536,13 @@ class MainApplication:
     def show_qr_payment(self, qr_url, session_id, amount, description):
         qr_window = tk.Toplevel(self.root)
         qr_window.title("Thanh toán qua QR")
-        qr_window.geometry("400x500")
+        qr_window.geometry('400x500')
         qr_window.transient(self.root)
         qr_window.grab_set()
-
+        
         qr_canvas = tk.Canvas(qr_window, width=300, height=300)
         qr_canvas.pack(pady=10)
-
+        
         try:
             with urllib.request.urlopen(qr_url) as response:
                 qr_img = Image.open(response).resize((300, 300), Image.Resampling.LANCZOS)
@@ -539,8 +559,7 @@ class MainApplication:
         ttk.Button(qr_window, text="Hủy", command=lambda: [self.payment_manager.cancel_payment(session_id), qr_window.destroy()]).pack(pady=10)
 
     def process_payment(self):
-        if not self.active_vehicle_id:
-            return
+        if not self.active_vehicle_id: return
 
         exit_time = datetime.now()
         fee_str = self.info_vars["Tổng Phí:"].get().replace(" VNĐ", "").replace(",", "")
@@ -581,7 +600,7 @@ class MainApplication:
         ttk.Button(filter_frame, text="Xóa Lọc", command=self.clear_history_filter).pack(side=tk.LEFT, padx=5)
         tree_frame = ttk.Frame(frame)
         tree_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        cols = ('ID', 'Biển số', 'RFID', 'Vào', 'Ra', 'Phí', 'Trạng thái', 'Thanh toán', 'NV Vào', 'NV Ra')
+        cols = ('ID', 'Biển số', 'RFID', 'Vào', 'Ra', 'Phí', 'Trạng thái', 'Payment status', 'NV Vào', 'NV Ra')
         self.history_tree = ttk.Treeview(tree_frame, columns=cols, show='headings')
         for col in cols:
             self.history_tree.heading(col, text=col)
@@ -626,7 +645,7 @@ class MainApplication:
         frame.pack(fill=tk.BOTH, expand=True, padx=10, pady=10)
         tree_frame = ttk.Frame(frame)
         tree_frame.pack(fill=tk.BOTH, expand=True, pady=5)
-        cols = ('ID', 'Tên đăng nhập', 'Họ và tên', 'Vai trò')
+        cols = ('ID', 'Username', 'Full name', 'Role')
         self.staff_tree = ttk.Treeview(tree_frame, columns=cols, show='headings')
         for col in cols: 
             self.staff_tree.heading(col, text=col)
@@ -637,9 +656,9 @@ class MainApplication:
         scrollbar.pack(side=tk.RIGHT, fill=tk.Y)
         btn_frame = ttk.Frame(frame)
         btn_frame.pack(pady=10)
-        ttk.Button(btn_frame, text="Thêm", command=self.add_staff).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Sửa", command=self.edit_staff).pack(side=tk.LEFT, padx=5)
-        ttk.Button(btn_frame, text="Xóa", command=self.delete_staff).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Add", command=self.add_staff).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Edit", command=self.edit_staff).pack(side=tk.LEFT, padx=5)
+        ttk.Button(btn_frame, text="Delete", command=self.delete_staff).pack(side=tk.LEFT, padx=5)
         self.load_staff_data()
 
     def load_staff_data(self):
@@ -652,20 +671,20 @@ class MainApplication:
         dialog.transient(self.root)
         dialog.grab_set()
         
-        ttk.Label(dialog, text="Tên đăng nhập:").grid(row=0, column=0, padx=5, pady=5)
+        ttk.Label(dialog, text="Username:").grid(row=0, column=0, padx=5, pady=5)
         user_entry = ttk.Entry(dialog)
         user_entry.grid(row=0, column=1, padx=5, pady=5)
         
-        ttk.Label(dialog, text="Mật khẩu:").grid(row=1, column=0, padx=5, pady=5)
+        ttk.Label(dialog, text="Password:").grid(row=1, column=0, padx=5, pady=5)
         pass_entry = ttk.Entry(dialog, show="*")
         pass_entry.grid(row=1, column=1, padx=5, pady=5)
-        if record: ttk.Label(dialog, text="(Để trống nếu không đổi)").grid(row=1, column=2)
+        if record: ttk.Label(dialog, text="(Leave blank if no change)").grid(row=1, column=2)
 
-        ttk.Label(dialog, text="Họ tên:").grid(row=2, column=0, padx=5, pady=5)
+        ttk.Label(dialog, text="Full name:").grid(row=2, column=0, padx=5, pady=5)
         name_entry = ttk.Entry(dialog)
         name_entry.grid(row=2, column=1, padx=5, pady=5)
         
-        ttk.Label(dialog, text="Vai trò:").grid(row=3, column=0, padx=5, pady=5)
+        ttk.Label(dialog, text="Role:").grid(row=3, column=0, padx=5, pady=5)
         role_combo = ttk.Combobox(dialog, values=['admin', 'user'], state='readonly')
         role_combo.grid(row=3, column=1, padx=5, pady=5)
 
