@@ -7,17 +7,17 @@ import json
 from datetime import datetime, timedelta
 import logging
 
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
+
 class PaymentManager:
     def __init__(self, config):
         self.config = config
         self.active_sessions = {}
         self._lock = threading.Lock()
-        logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     def generate_unique_description(self, license_plate, hours):
         timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
         unique_id = str(uuid.uuid4())[:8]
-        # Bỏ hết _ , chỉ giữ chữ cái và số
         return f"BSX{license_plate}{hours}H{timestamp}{unique_id}"
 
     def generate_vietqr_url(self, amount, description, account_name):
@@ -87,11 +87,13 @@ class PaymentManager:
             time.sleep(check_interval)
             waited += check_interval
 
-        logging.info(f"Payment timeout for session: {session_id}")
-        with self._lock:
-            if session_id in self.active_sessions:
-                del self.active_sessions[session_id]
-        on_timeout()
+        # Chỉ log timeout và gọi on_timeout nếu thực sự hết thời gian (không phải do cancel session)
+        if waited >= max_wait:
+            logging.info(f"Payment timeout for session: {session_id}")
+            with self._lock:
+                if session_id in self.active_sessions:
+                    del self.active_sessions[session_id]
+            on_timeout()
 
     def start_payment_flow(self, vehicle_data, total_fee, on_success, on_timeout):
         license_plate = vehicle_data.get('license_plate', '')

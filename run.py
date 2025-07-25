@@ -4,7 +4,7 @@ from main_app import MainApplication
 from login_flow import LoginFlow
 import logging
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format='%(levelname)s - %(message)s')
 
 def main():
     root = tk.Tk()

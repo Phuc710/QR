@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X PARKING</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/mqtt/4.3.7/mqtt.min.js"></script>
+    <script src="https://unpkg.com/xlsx/dist/xlsx.full.min.js"></script>
+    
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            color: #333;
+        }
+
+        .container {
+            display: flex;
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: 280px;
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            box-shadow: 2px 0 20px rgba(0, 0, 0, 0.1);
+            padding: 20px;
+            transition: all 0.3s ease;
+        }
+
+        .logo {
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: #667eea;
+        }
+
+        .nav-item {
+            padding: 15px 20px;
+            margin: 8px 0;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .nav-item:hover {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            transform: translateX(5px);
+        }
+
+        .nav-item.active {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .main-content {
+            flex: 1;
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .page {
+            display: none;
+        }
+
+        .page.active {
+            display: block;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 4px;
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 15px 40px rgba(0, 0, 0, 0.15);
+        }
+
+        .stat-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .stat-icon {
+            font-size: 2rem;
+            opacity: 0.8;
+        }
+
+        .stat-value {
+            font-size: 2.5rem;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            color: #666;
+            font-size: 0.9rem;
+        }
+
+        .chart-container {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 25px;
+            margin-bottom: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        }
+
+        .control-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+
+        .control-btn {
+            width: 100%;
+            padding: 12px;
+            margin: 8px 0;
+            border: none;
+            border-radius: 10px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+
+        .btn-emergency {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #20bf6b, #26de81);
+            color: white;
+        }
+
+        .control-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.2);
+        }
+
+        .status-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin-right: 8px;
+        }
+
+        .status-online {
+            background: #20bf6b;
+            box-shadow: 0 0 10px #20bf6b;
+        }
+
+        .status-offline {
+            background: #ff6b6b;
+        }
+
+        .history-table {
+            width: 100%;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+            margin-top: 20px;
+        }
+
+        .history-table th,
+        .history-table td {
+            padding: 15px;
+            text-align: left;
+            border-bottom: 1px solid #eee;
+        }
+
+        .history-table th {
+            background: linear-gradient(135deg, #667eea, #764ba2);
+            color: white;
+            font-weight: bold;
+        }
+
+        .history-table tr:hover {
+            background: rgba(102, 126, 234, 0.1);
+        }
+
+        .slot-status {
+            display: flex;
+            gap: 15px;
+            margin: 20px 0;
+        }
+
+        .slot {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 20px;
+            text-align: center;
+            transition: all 0.3s ease;
+            position: relative;
+            overflow: hidden;
+        }
+
+        .slot.occupied {
+            background: linear-gradient(135deg, #ff6b6b, #ee5a24);
+            color: white;
+        }
+
+        .slot.free {
+            background: linear-gradient(135deg, #20bf6b, #26de81);
+            color: white;
+        }
+
+        .slot::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: -100%;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+            transition: left 0.5s;
+        }
+
+        .slot:hover::before {
+            left: 100%;
+        }
+
+        .filter-controls {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 15px;
+            border-radius: 15px;
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.05);
+        }
+
+        .filter-controls input,
+        .filter-controls button {
+            padding: 10px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+        }
+
+        .filter-controls button {
+            background: #667eea;
+            color: white;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+
+        .filter-controls button:hover {
+            background: #764ba2;
+        }
+
+        @media (max-width: 768px) {
+            .container {
+                flex-direction: column;
+            }
+            
+            .sidebar {
+                width: 100%;
+                height: auto;
+            }
+            
+            .control-panel {
+                position: relative;
+                right: auto;
+                top: auto;
+                transform: none;
+                width: 100%;
+                margin-top: 20px;
+            }
+            
+            .stats-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .pulse {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="logo">🅿️ Smart Parking</div>
+            <div class="nav-item active" onclick="showPage('overview')">
+                📊 Tổng quan & Điều khiển
+            </div>
+            <div class="nav-item" onclick="showPage('charts')">
+                📈 Biểu đồ & Thống kê
+            </div>
+            <div class="nav-item" onclick="showPage('history')">
+                📋 Lịch sử
+            </div>
+            <div class="nav-item" onclick="showPage('settings')">
+                ⚙️ Cài đặt
+            </div>
+            
+            <div style="margin-top: 30px; padding-top: 30px; border-top: 1px solid #eee;">
+                <div style="margin-bottom: 15px;">
+                    <span class="status-indicator status-online" id="mqttStatusIndicator"></span>
+                    <span id="mqttStatusText">MQTT: Connecting...</span>
+                </div>
+                <div>
+                    <span class="status-indicator status-online"></span>
+                    <span>System: Active</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="main-content">
+            <div id="overview" class="page active">
+                <h2 style="color: white; margin-bottom: 20px;">📊 Tổng quan hệ thống</h2>
+                
+                <div class="slot-status">
+                    <div class="slot free" id="slot1">
+                        <div style="font-size: 2rem;">🅿️</div>
+                        <div>Slot 1</div>
+                        <div>Trống</div>
+                    </div>
+                    <div class="slot free" id="slot2">
+                        <div style="font-size: 2rem;">🅿️</div>
+                        <div>Slot 2</div>
+                        <div>Trống</div>
+                    </div>
+                    <div class="slot free" id="slot3">
+                        <div style="font-size: 2rem;">🅿️</div>
+                        <div>Slot 3</div>
+                        <div>Trống</div>
+                    </div>
+                </div>
+
+                <div class="stats-grid">
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">🚗</div>
+                        </div>
+                        <div class="stat-value" id="currentCars">0</div>
+                        <div class="stat-label">Xe đang gửi / <span id="totalSlots">3</span></div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">🅿️</div>
+                        </div>
+                        <div class="stat-value" id="freeSlots">3</div>
+                        <div class="stat-label">Chỗ trống</div>
+                    </div>
+
+                    <div class="stat-card pulse">
+                        <div class="stat-header">
+                            <div class="stat-icon">💰</div>
+                        </div>
+                        <div class="stat-value" id="todayRevenue">0</div>
+                        <div class="stat-label">Doanh thu hôm nay (VNĐ)</div>
+                    </div>
+
+                    <div class="stat-card">
+                        <div class="stat-header">
+                            <div class="stat-icon">🚙</div>
+                        </div>
+                        <div class="stat-value" id="todayTotal">0</div>
+                        <div class="stat-label">Tổng lượt xe hôm nay</div>
+                    </div>
+                </div>
+
+                <div class="control-panel">
+                    <h4 style="margin-bottom: 15px; text-align: center;">🎛️ Điều khiển Barrier</h4>
+                    
+                    <button class="control-btn btn-emergency" onclick="emergencyOpen()">
+                        🚨 Mở khẩn cấp
+                    </button>
+                    
+                    <button class="control-btn btn-primary" onclick="closeBarrier()">
+                        🚧 Đóng barrier
+                    </button>
+                    
+                    <button class="control-btn btn-success" onclick="resetSystem()">
+                        🔄 Reset hệ thống
+                    </button>
+                    
+                    <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee;">
+                        <small>Cập nhật: <span id="lastUpdate">--:--:--</span></small>
+                    </div>
+                </div>
+            </div>
+
+            <div id="charts" class="page">
+                <h2 style="color: white; margin-bottom: 20px;">📈 Biểu đồ & Thống kê</h2>
+                
+                <div class="chart-container">
+                    <h3>Doanh thu theo giờ</h3>
+                    <canvas id="revenueChart"></canvas>
+                </div>
+
+                <div class="chart-container">
+                    <h3>Lưu lượng xe theo khung giờ</h3>
+                    <canvas id="trafficChart"></canvas>
+                </div>
+            </div>
+
+            <div id="history" class="page">
+                <h2 style="color: white; margin-bottom: 20px;">📋 Lịch sử ra vào</h2>
+                
+                <div class="filter-controls">
+                    <input type="text" id="plateFilter" placeholder="Lọc biển số xe...">
+                    <input type="date" id="dateFilter">
+                    <button onclick="fetchHistory()">Lọc</button>
+                    <button onclick="exportToExcel()">Xuất Excel</button>
+                </div>
+
+                <table class="history-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Biển số</th>
+                            <th>RFID</th>
+                            <th>Thời gian vào</th>
+                            <th>Thời gian ra</th>
+                            <th>Phí</th>
+                            <th>Trạng thái</th>
+                            <th>Trạng thái thanh toán</th>
+                            <th>Nhân viên vào</th>
+                            <th>Nhân viên ra</th>
+                        </tr>
+                    </thead>
+                    <tbody id="historyTableBody">
+                        </tbody>
+                </table>
+            </div>
+
+            <div id="settings" class="page">
+                <h2 style="color: white; margin-bottom: 20px;">⚙️ Cài đặt hệ thống</h2>
+                
+                <div class="chart-container">
+                    <h3>Cấu hình giá</h3>
+                    <div style="margin: 20px 0;">
+                        <label>Giá theo giờ: </label>
+                        <input type="number" id="hourlyFee" value="10000" style="padding: 8px; border-radius: 5px; border: 1px solid #ddd;">
+                        <span> VNĐ</span>
+                    </div>
+                    
+                    <h3>Cấu hình MQTT</h3>
+                    <div style="margin: 20px 0;">
+                        <label>Broker URL: </label>
+                        <input type="text" id="mqttBrokerUrl" value="ws://localhost:9001" style="padding: 8px; border-radius: 5px; border: 1px solid #ddd; width: 250px;">
+                        <button onclick="connectMQTT()">Kết nối</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+    let mqttClient;
+    let revenueChart;
+    let trafficChart;
+    const TOTAL_SLOTS = 3; // Tổng số chỗ đậu xe
+
+    document.addEventListener('DOMContentLoaded', function() {
+        initCharts();
+        updateTime();
+        setInterval(updateTime, 1000);
+        connectMQTT(); // Kết nối MQTT ngay khi tải trang
+        fetchParkingOverview(); // Lấy dữ liệu tổng quan ban đầu
+        fetchHistory(); // Lấy lịch sử ban đầu
+        fetchChartData(); // Lấy dữ liệu biểu đồ ban đầu
+    });
+
+    function showPage(pageId) {
+        document.querySelectorAll('.page').forEach(page => {
+            page.classList.remove('active');
+        });
+        
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        document.getElementById(pageId).classList.add('active');
+        
+        // Tìm nav-item tương ứng với pageId và thêm class 'active'
+        document.querySelector(`.nav-item[onclick="showPage('${pageId}')"]`).classList.add('active');
+
+        // Cập nhật dữ liệu khi chuyển sang trang lịch sử hoặc biểu đồ
+        if (pageId === 'history') {
+            fetchHistory();
+        } else if (pageId === 'charts') {
+            fetchChartData();
+        }
+    }
+
+    function connectMQTT() {
+        // Sử dụng địa chỉ IP của broker MQTT của bạn. Đây là địa chỉ cứng từ main_app.py.
+        // Trong môi trường thực tế, bạn nên cấu hình địa chỉ này linh hoạt hơn.
+        const brokerUrl = "ws://192.168.1.4:1883/mqtt"; // Địa chỉ WebSocket của MQTT broker
+        
+        // Nếu đã có client, đóng kết nối cũ
+        if (mqttClient && mqttClient.connected) {
+            mqttClient.end();
+        }
+        
+        // Khởi tạo MQTT client
+        mqttClient = mqtt.connect(brokerUrl);
+        
+        mqttClient.on('connect', function() {
+            console.log('Connected to MQTT broker');
+            document.getElementById('mqttStatusIndicator').classList.remove('status-offline');
+            document.getElementById('mqttStatusIndicator').classList.add('status-online');
+            document.getElementById('mqttStatusText').textContent = 'MQTT: Online';
+
+            // Đăng ký các topic cần thiết
+            mqttClient.subscribe('parking/+/status'); // Trạng thái từng slot
+            mqttClient.subscribe('parking/overview'); // Dữ liệu tổng quan
+            mqttClient.subscribe('parking/history/new'); // Thông báo lịch sử mới
+            mqttClient.subscribe('parking/chart/revenue');
+            mqttClient.subscribe('parking/chart/traffic');
+        });
+        
+        mqttClient.on('message', function(topic, message) {
+            handleMQTTMessage(topic, message.toString());
+        });
+
+        mqttClient.on('error', function(error) {
+            console.error("MQTT error:", error);
+            document.getElementById('mqttStatusIndicator').classList.remove('status-online');
+            document.getElementById('mqttStatusIndicator').classList.add('status-offline');
+            document.getElementById('mqttStatusText').textContent = 'MQTT: Error';
+        });
+
+        mqttClient.on('close', function() {
+            console.log("MQTT disconnected");
+            document.getElementById('mqttStatusIndicator').classList.remove('status-online');
+            document.getElementById('mqttStatusIndicator').classList.add('status-offline');
+            document.getElementById('mqttStatusText').textContent = 'MQTT: Offline';
+        });
+    }
+
+    async function handleMQTTMessage(topic, message) {
+        try {
+            const data = JSON.parse(message);
+            console.log(`Received MQTT message on topic ${topic}:`, data);
+
+            if (topic.startsWith('parking/') && topic.endsWith('/status')) {
+                // Ví dụ topic: parking/slot1/status, data: { "status": "occupied" }
+                const slotId = topic.split('/')[1]; 
+                updateSlotStatus(slotId, data.status);
+                fetchParkingOverview(); // Cập nhật lại số liệu tổng quan sau khi slot thay đổi
+            } else if (topic === 'parking/overview') {
+                document.getElementById('currentCars').textContent = data.current_cars;
+                document.getElementById('freeSlots').textContent = data.free_slots;
+                document.getElementById('todayRevenue').textContent = data.today_revenue.toLocaleString();
+                document.getElementById('todayTotal').textContent = data.today_total_cars;
+                updateAllSlotStatuses(data.slot_statuses);
+            } else if (topic === 'parking/history/new') {
+                if (document.getElementById('history').classList.contains('active')) {
+                    fetchHistory();
+                }
+            } else if (topic === 'parking/chart/revenue') {
+                updateRevenueChart(data.labels, data.values);
+            } else if (topic === 'parking/chart/traffic') {
+                updateTrafficChart(data.labels, data.values);
+            }
+
+        } catch (e) {
+            console.error("Error parsing MQTT message:", e, message);
+        }
+    }
+
+    function updateSlotStatus(slotId, status) {
+        const slotElement = document.getElementById(slotId);
+        if (slotElement) {
+            if (status === 'occupied') {
+                slotElement.className = 'slot occupied';
+                slotElement.innerHTML = `<div style="font-size: 2rem;">🚗</div><div>${slotId.replace('slot', 'Slot ')}</div><div>Có xe</div>`;
+            } else {
+                slotElement.className = 'slot free';
+                slotElement.innerHTML = `<div style="font-size: 2rem;">🅿️</div><div>${slotId.replace('slot', 'Slot ')}</div><div>Trống</div>`;
+            }
+        }
+    }
+
+    function updateAllSlotStatuses(slotStatuses) {
+        for (const slotId in slotStatuses) {
+            updateSlotStatus(slotId, slotStatuses[slotId]);
+        }
+    }
+
+    async function fetchParkingOverview() {
+        try {
+            const response = await fetch('http://127.0.0.1:5000/api/overview');
+            const data = await response.json();
+            document.getElementById('currentCars').textContent = data.current_cars;
+            document.getElementById('freeSlots').textContent = data.free_slots;
+            document.getElementById('todayRevenue').textContent = data.today_revenue.toLocaleString() + ' VNĐ'; // Format tiền tệ
+            document.getElementById('todayTotal').textContent = data.today_total_cars;
+            document.getElementById('totalSlots').textContent = data.total_slots;
+            updateAllSlotStatuses(data.slot_statuses);
+        } catch (error) {
+            console.error('Error fetching parking overview:', error);
+        }
+    }
+
+    function emergencyOpen() {
+        if (mqttClient && mqttClient.connected) {
+            mqttClient.publish('parking/barrier/control', 'open');
+            alert('🚨 Lệnh mở barrier khẩn cấp đã được gửi!');
+        } else {
+            alert('MQTT không kết nối. Không thể gửi lệnh.');
+        }
+    }
+
+    function closeBarrier() {
+        if (mqttClient && mqttClient.connected) {
+            mqttClient.publish('parking/barrier/control', 'close');
+            alert('🚧 Lệnh đóng barrier đã được gửi!');
+        } else {
+            alert('MQTT không kết nối. Không thể gửi lệnh.');
+        }
+    }
+
+    function resetSystem() {
+        if (mqttClient && mqttClient.connected) {
+            mqttClient.publish('parking/system/control', 'reset');
+            alert('🔄 Lệnh reset hệ thống đã được gửi!');
+        } else {
+            alert('MQTT không kết nối. Không thể gửi lệnh.');
+        }
+    }
+
+    function initCharts() {
+        const revenueCtx = document.getElementById('revenueChart').getContext('2d');
+        revenueChart = new Chart(revenueCtx, {
+            type: 'line',
+            data: {
+                labels: [], 
+                datasets: [{
+                    label: 'Doanh thu (VNĐ)',
+                    data: [], 
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                    tension: 0.4,
+                    fill: true
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, 
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        ticks: {
+                            callback: function(value) {
+                                return value.toLocaleString() + ' VNĐ';
+                            }
+                        }
+                    }
+                }
+            }
+        });
+
+        const trafficCtx = document.getElementById('trafficChart').getContext('2d');
+        trafficChart = new Chart(trafficCtx, {
+            type: 'bar',
+            data: {
+                labels: [], 
+                datasets: [{
+                    label: 'Số xe',
+                    data: [], 
+                    backgroundColor: 'rgba(102, 126, 234, 0.8)',
+                    borderColor: '#667eea',
+                    borderWidth: 1
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false, 
+                plugins: {
+                    legend: {
+                        display: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    async function fetchChartData() {
+        try {
+            const revenueResponse = await fetch('http://127.0.0.1:5000/api/chart_revenue');
+            const revenueData = await revenueResponse.json();
+            updateRevenueChart(revenueData.labels, revenueData.values);
+
+            const trafficResponse = await fetch('http://127.0.0.1:5000/api/chart_traffic');
+            const trafficData = await trafficResponse.json();
+            updateTrafficChart(trafficData.labels, trafficData.values);
+
+        } catch (error) {
+            console.error('Error fetching chart data:', error);
+        }
+    }
+
+    function updateRevenueChart(labels, values) {
+        revenueChart.data.labels = labels;
+        revenueChart.data.datasets[0].data = values;
+        revenueChart.update();
+    }
+
+    function updateTrafficChart(labels, values) {
+        trafficChart.data.labels = labels;
+        trafficChart.data.datasets[0].data = values;
+        trafficChart.update();
+    }
+
+    async function fetchHistory() {
+        const plateFilter = document.getElementById('plateFilter').value;
+        const dateFilter = document.getElementById('dateFilter').value;
+        
+        let queryParams = new URLSearchParams();
+        if (plateFilter) {
+            queryParams.append('plate', plateFilter);
+        }
+        if (dateFilter) {
+            queryParams.append('date', dateFilter);
+        }
+
+        try {
+            const response = await fetch(`http://127.0.0.1:5000/api/history?${queryParams.toString()}`);
+            const history = await response.json();
+            renderHistoryTable(history);
+        } catch (error) {
+            console.error('Error fetching history:', error);
+        }
+    }
+
+    function renderHistoryTable(history) {
+        const tbody = document.getElementById('historyTableBody');
+        tbody.innerHTML = ''; // Xóa dữ liệu cũ
+        history.forEach(record => {
+            const row = tbody.insertRow();
+            row.insertCell().textContent = record.id;
+            row.insertCell().textContent = record.license_plate;
+            row.insertCell().textContent = record.rfid_id || 'N/A';
+            row.insertCell().textContent = new Date(record.entry_time).toLocaleString('vi-VN');
+            row.insertCell().textContent = record.exit_time ? new Date(record.exit_time).toLocaleString('vi-VN') : 'Trong bãi';
+            row.insertCell().textContent = record.fee ? record.fee.toLocaleString() + ' VNĐ' : '-';
+            row.insertCell().textContent = record.status;
+            row.insertCell().textContent = record.payment_status;
+            row.insertCell().textContent = record.employee_entry || 'N/A';
+            row.insertCell().textContent = record.employee_exit || 'N/A';
+        });
+    }
+
+    function exportToExcel() {
+        const table = document.querySelector('.history-table');
+        const ws = XLSX.utils.table_to_sheet(table);
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "Lịch Sử Đỗ Xe");
+        XLSX.writeFile(wb, "lich_su_do_xe.xlsx");
+        alert('Đã xuất file Excel "lich_su_do_xe.xlsx"');
+    }
+
+    function updateTime() {
+        const now = new Date();
+        const timeString = now.toLocaleTimeString('vi-VN');
+        document.getElementById('lastUpdate').textContent = timeString;
+    }
+
+    // MQTT Broker URL trong phần cài đặt
+    document.getElementById('mqttBrokerUrl').value = "ws://192.168.1.4:1883/mqtt"; 
+</script>
+</body>
+</html>
